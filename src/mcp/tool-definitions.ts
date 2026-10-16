@@ -313,6 +313,50 @@ export const MCP_TOOLS: McpToolDefinition[] = [
     },
   },
   {
+    name: 'list_custom_fields',
+    title: 'Listar campos personalizados',
+    description:
+      'Listar os campos personalizados com IDs, tipo, código e opções (enums). Sem entity_type, devolve os campos de leads e de contatos.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        entity_type: {
+          ...entityTypeProperty,
+          description: 'Tipo da entidade (opcional; padrão: leads e contacts)',
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'list_sources',
+    title: 'Listar fontes',
+    description: 'Listar as fontes de leads (canais e integrações) com IDs e pipeline de destino',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
+    name: 'list_salesbots',
+    title: 'Listar Salesbots',
+    description: 'Listar os Salesbots da conta com IDs, tipo e configurações',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        type_functionality: {
+          type: 'string',
+          description: 'Filtrar por tipo (ex.: regular, greeting, marketing, nps)',
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'list_chat_templates',
+    title: 'Listar modelos de chat',
+    description:
+      'Listar modelos de mensagem de chat (inclui WhatsApp) com IDs e status de aprovação. A API devolve apenas os modelos criados pela integração do token.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
     name: 'ask_kommo',
     title: 'Perguntar ao Kommo',
     description: 'Fazer perguntas inteligentes sobre dados do Kommo CRM usando IA conversacional',

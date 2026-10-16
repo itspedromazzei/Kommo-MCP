@@ -1,5 +1,6 @@
 import {
   KommoAPI,
+  type KommoCustomField,
   type KommoEntityType,
   type LeadOrderField,
   type SortDirection,
@@ -22,6 +23,20 @@ function errorResult(message: string): McpToolResult {
 
 function isEntityType(value: unknown): value is KommoEntityType {
   return value === 'leads' || value === 'contacts' || value === 'companies';
+}
+
+// Mantém só o que um Salesbot precisa referenciar; a resposta crua traz dezenas de chaves.
+function compactCustomField(field: KommoCustomField) {
+  return {
+    id: field.id,
+    name: field.name,
+    type: field.type,
+    code: field.code ?? null,
+    group_id: field.group_id ?? null,
+    is_api_only: field.is_api_only ?? false,
+    required_statuses: field.required_statuses ?? [],
+    enums: (field.enums ?? []).map(({ id, value }) => ({ id, value })),
+  };
 }
 
 export async function executeTool(
@@ -226,6 +241,32 @@ export async function executeTool(
       }
       return textResult(await kommoAPI.stopSalesbot(botId, entityId, entityType));
     }
+
+    case 'list_custom_fields': {
+      const entityType = args?.entity_type;
+      if (entityType !== undefined && !isEntityType(entityType)) {
+        return errorResult('entity_type deve ser leads, contacts ou companies.');
+      }
+      const entityTypes: KommoEntityType[] = entityType ? [entityType] : ['leads', 'contacts'];
+      const fields = await Promise.all(
+        entityTypes.map(async (type) => [
+          type,
+          (await kommoAPI.getCustomFields(type)).map(compactCustomField),
+        ]),
+      );
+      return textResult(Object.fromEntries(fields));
+    }
+
+    case 'list_sources':
+      return textResult({ sources: await kommoAPI.getSources() });
+
+    case 'list_salesbots':
+      return textResult({
+        salesbots: await kommoAPI.getSalesbots(args?.type_functionality as string | undefined),
+      });
+
+    case 'list_chat_templates':
+      return textResult({ chat_templates: await kommoAPI.getChatTemplates() });
 
     case 'ask_kommo':
       return handleAskKommo(kommoAPI, (args?.question as string) || '');

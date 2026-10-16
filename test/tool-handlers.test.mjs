@@ -137,6 +137,73 @@ test('Kommo API failures are propagated to the transport error boundary', async 
   await assert.rejects(() => executeTool(api, 'create_lead', { name: 'Teste' }), apiError);
 });
 
+test('list_custom_fields defaults to leads and contacts and keeps only IDs and enums', async () => {
+  const calls = [];
+  const api = {
+    async getCustomFields(entityType) {
+      calls.push(entityType);
+      return [
+        {
+          id: entityType === 'leads' ? 10 : 20,
+          name: 'Área',
+          type: 'select',
+          code: null,
+          sort: 500,
+          is_api_only: false,
+          entity_type: entityType,
+          enums: [{ id: 1, value: 'Previdenciário', sort: 1 }],
+          _links: { self: { href: 'x' } },
+        },
+      ];
+    },
+  };
+
+  const data = resultData(await executeTool(api, 'list_custom_fields', {}));
+
+  assert.deepEqual(calls.sort(), ['contacts', 'leads']);
+  assert.deepEqual(Object.keys(data).sort(), ['contacts', 'leads']);
+  assert.deepEqual(data.leads[0], {
+    id: 10,
+    name: 'Área',
+    type: 'select',
+    code: null,
+    group_id: null,
+    is_api_only: false,
+    required_statuses: [],
+    enums: [{ id: 1, value: 'Previdenciário' }],
+  });
+});
+
+test('list_custom_fields rejects an unknown entity_type without calling Kommo', async () => {
+  const api = {
+    async getCustomFields() {
+      assert.fail('Kommo must not be called for invalid arguments');
+    },
+  };
+
+  const result = await executeTool(api, 'list_custom_fields', { entity_type: 'tasks' });
+
+  assert.equal(result.isError, true);
+  assert.match(result.content[0].text, /entity_type/);
+});
+
+test('list_salesbots forwards the type filter', async () => {
+  const calls = [];
+  const api = {
+    async getSalesbots(type) {
+      calls.push(type);
+      return [{ id: 7, name: 'Boas-vindas' }];
+    },
+  };
+
+  const data = resultData(
+    await executeTool(api, 'list_salesbots', { type_functionality: 'regular' }),
+  );
+
+  assert.deepEqual(calls, ['regular']);
+  assert.deepEqual(data, { salesbots: [{ id: 7, name: 'Boas-vindas' }] });
+});
+
 test('every advertised tool has an executable handler', async () => {
   const validArguments = {
     get_account: {},
@@ -161,13 +228,27 @@ test('every advertised tool has an executable handler', async () => {
     unpin_note: { entity_type: 'leads', note_id: 1 },
     run_salesbot: { bot_id: 1, entity_id: 1, entity_type: 'leads' },
     stop_salesbot: { bot_id: 1, entity_id: 1, entity_type: 'leads' },
+    list_custom_fields: { entity_type: 'leads' },
+    list_sources: {},
+    list_salesbots: {},
+    list_chat_templates: {},
     ask_kommo: { question: 'ajuda' },
   };
   const api = new Proxy(
     {},
     {
       get(_target, property) {
-        if (property === 'getAllLeads') return async () => [];
+        if (
+          [
+            'getAllLeads',
+            'getCustomFields',
+            'getSources',
+            'getSalesbots',
+            'getChatTemplates',
+          ].includes(property)
+        ) {
+          return async () => [];
+        }
         return async () => ({});
       },
     },

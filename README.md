@@ -44,8 +44,9 @@ Desktop, etc.).
   compatibilidade stateless para clientes da família 2025
 - **Dois transportes oficiais**: Streamable HTTP para serviços remotos e
   `stdio` para clientes locais
-- **23 tools**: leads, contatos, empresas, tarefas, pipelines, notas,
-  relatórios, dashboard, Salesbot, motivos de perda
+- **27 tools**: leads, contatos, empresas, tarefas, pipelines, notas,
+  relatórios, dashboard, Salesbot, motivos de perda e catálogos de IDs
+  (campos, fontes, bots e modelos de chat)
 - **5 resources**: relatório de vendas, pipelines, motivos de perda,
   dashboard, conta
 - **4 prompts**: templates para análise de vendas, leads, pipelines e motivos
@@ -252,6 +253,17 @@ pela tela de Connectors.
 | `get_loss_reason`  | Obter motivo de perda por ID                                  |
 | `run_salesbot`     | Iniciar Salesbot (`bot_id`, `entity_id`, `entity_type=leads`) |
 | `stop_salesbot`    | Parar Salesbot (`bot_id`, `entity_id`, `entity_type=leads`)   |
+
+### Catálogos de IDs para Salesbot
+
+Tools somente leitura que entregam os IDs que um Salesbot referencia.
+
+| Tool                  | Descrição                                                                              |
+| --------------------- | -------------------------------------------------------------------------------------- |
+| `list_custom_fields`  | Campos personalizados com IDs e enums (`entity_type` opcional; padrão: leads+contatos) |
+| `list_sources`        | Fontes de leads com IDs e pipeline de destino                                          |
+| `list_salesbots`      | Salesbots da conta com IDs e tipo (`type_functionality` opcional)                      |
+| `list_chat_templates` | Modelos de chat/WhatsApp com status de aprovação (só os criados pela integração)       |
 
 ### IA conversacional
 

@@ -22,7 +22,7 @@ async function verifyDiscovery(url, createLeadCalls, versionNegotiation) {
       client.listPrompts(),
     ]);
 
-    assert.equal(tools.length, 23);
+    assert.equal(tools.length, 27);
     assert.equal(resources.length, 5);
     assert.equal(prompts.length, 4);
     assert.equal(tools.find((tool) => tool.name === 'get_leads')?.annotations?.readOnlyHint, true);

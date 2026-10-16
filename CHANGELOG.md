@@ -28,6 +28,13 @@ e este projeto segue [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 - Transporte local `stdio` e executável `kommo-mcp-server` para instalação npm.
 - Compatibilidade stateless com clientes MCP da família 2025.
 - Limitador coordenado de requisições ao Kommo por processo.
+- Tools somente leitura `list_custom_fields`, `list_sources`, `list_salesbots` e
+  `list_chat_templates` para coletar os IDs usados em Salesbots.
+
+### Alterado
+
+- Erros 400 do Kommo agora devolvem ao cliente MCP o `detail` e os
+  `validation-errors` sanitizados, em vez de uma mensagem genérica.
 - Cobertura do código de produção medida no CI com pisos explícitos para
   linhas, branches e funções, compatíveis com Node 22 e 24.
 - Análise CodeQL semanal e em Pull Requests.

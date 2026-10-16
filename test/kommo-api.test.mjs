@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { KommoAPI, parseRetryAfter } from '../dist/kommo-api.js';
+import { safeToolError } from '../dist/mcp/server.js';
 
 test('rejects unsafe retry and timeout configuration', () => {
   const baseConfig = { baseUrl: 'https://example.kommo.com', accessToken: 'token' };
@@ -272,4 +273,168 @@ test('listLeads returns an empty list when Kommo answers 204', async (context) =
   });
   const api = new KommoAPI({ baseUrl, accessToken: 'test', maxRetries: 0 });
   assert.deepEqual(await api.listLeads({ query: 'inexistente' }), { _embedded: { leads: [] } });
+});
+
+function sendJson(response, body) {
+  response.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(body));
+}
+
+test('custom fields walk every page of the documented entity endpoint', async (context) => {
+  const urls = [];
+  const baseUrl = await withServer(context, (request, response) => {
+    urls.push(request.url);
+    const url = new URL(request.url, baseUrl);
+    const page = url.searchParams.get('page');
+    if (url.pathname === '/api/v4/contacts/custom_fields') {
+      response.writeHead(204).end();
+      return;
+    }
+    sendJson(response, {
+      _embedded: {
+        custom_fields: [{ id: Number(page), name: `Campo ${page}`, type: 'select', enums: [] }],
+      },
+      _links: page === '1' ? { next: { href: 'next' } } : {},
+    });
+  });
+  const api = new KommoAPI({ baseUrl, accessToken: 'test', maxRetries: 0 });
+
+  const leadFields = await api.getCustomFields('leads');
+  assert.deepEqual(
+    leadFields.map((field) => field.id),
+    [1, 2],
+  );
+  assert.deepEqual(await api.getCustomFields('contacts'), []);
+  assert.deepEqual(urls, [
+    '/api/v4/leads/custom_fields?limit=50&page=1',
+    '/api/v4/leads/custom_fields?limit=50&page=2',
+    '/api/v4/contacts/custom_fields?limit=50&page=1',
+  ]);
+});
+
+test('sources come from /api/v4/sources and 204 means no sources', async (context) => {
+  let empty = false;
+  const urls = [];
+  const baseUrl = await withServer(context, (request, response) => {
+    urls.push(request.url);
+    if (empty) {
+      response.writeHead(204).end();
+      return;
+    }
+    sendJson(response, {
+      _embedded: { sources: [{ id: 3, name: 'WhatsApp', pipeline_id: 9, external_id: 'wa' }] },
+    });
+  });
+  const api = new KommoAPI({ baseUrl, accessToken: 'test', maxRetries: 0 });
+
+  assert.deepEqual(await api.getSources(), [
+    { id: 3, name: 'WhatsApp', pipeline_id: 9, external_id: 'wa' },
+  ]);
+  empty = true;
+  assert.deepEqual(await api.getSources(), []);
+  assert.deepEqual(urls, ['/api/v4/sources', '/api/v4/sources']);
+});
+
+test('salesbots page through /api/v4/bots using _page_count and the type filter', async (context) => {
+  const urls = [];
+  const baseUrl = await withServer(context, (request, response) => {
+    urls.push(decodeURIComponent(request.url));
+    const page = Number(new URL(request.url, baseUrl).searchParams.get('page'));
+    sendJson(response, {
+      _total_items: 2,
+      _page: page,
+      _page_count: 2,
+      _links: { self: { href: 'self' } },
+      _embedded: { items: [{ id: page, name: `Bot ${page}`, type_functionality: 'regular' }] },
+    });
+  });
+  const api = new KommoAPI({ baseUrl, accessToken: 'test', maxRetries: 0 });
+
+  const bots = await api.getSalesbots('regular');
+  assert.deepEqual(
+    bots.map((bot) => bot.id),
+    [1, 2],
+  );
+  assert.deepEqual(urls, [
+    '/api/v4/bots?filter[type_functionality][]=regular&limit=250&page=1',
+    '/api/v4/bots?filter[type_functionality][]=regular&limit=250&page=2',
+  ]);
+});
+
+test('chat templates request review status and tolerate an empty account', async (context) => {
+  let empty = false;
+  const urls = [];
+  const baseUrl = await withServer(context, (request, response) => {
+    urls.push(request.url);
+    if (empty) {
+      response.writeHead(204).end();
+      return;
+    }
+    sendJson(response, {
+      _page: 1,
+      _links: { self: { href: 'self' } },
+      _embedded: {
+        chat_templates: [{ id: 11, name: 'Boas-vindas', type: 'waba', review_status: 'approved' }],
+      },
+    });
+  });
+  const api = new KommoAPI({ baseUrl, accessToken: 'test', maxRetries: 0 });
+
+  assert.deepEqual(await api.getChatTemplates(), [
+    { id: 11, name: 'Boas-vindas', type: 'waba', review_status: 'approved' },
+  ]);
+  empty = true;
+  assert.deepEqual(await api.getChatTemplates(), []);
+  assert.deepEqual(urls, [
+    '/api/v4/chats/templates?with=reviews&limit=50&page=1',
+    '/api/v4/chats/templates?with=reviews&limit=50&page=1',
+  ]);
+});
+
+test('400 errors expose the sanitized Kommo detail to the MCP client', async (context) => {
+  const token = 'eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJlLXNlY3JldA';
+  const baseUrl = await withServer(context, (_request, response) => {
+    response.writeHead(400, { 'Content-Type': 'application/problem+json' }).end(
+      JSON.stringify({
+        title: 'Bad Request',
+        type: 'https://httpstatus.es/400',
+        status: 400,
+        detail: `Request validation failed\nBearer ${token}`,
+        'validation-errors': [
+          {
+            request_id: '0',
+            errors: [
+              {
+                code: 'NotSupportedChoice',
+                path: 'custom_fields_values.0.values.0.enum_id',
+                detail: 'The value you selected is not a valid choice.',
+              },
+            ],
+          },
+        ],
+      }),
+    );
+  });
+  const api = new KommoAPI({ baseUrl, accessToken: 'test', maxRetries: 0 });
+
+  const error = await api.createLead({ name: 'Teste' }).catch((caught) => caught);
+  const result = safeToolError(error);
+
+  assert.equal(result.isError, true);
+  assert.equal(
+    result.content[0].text,
+    'O Kommo recusou a requisição (400): Request validation failed Bearer [removido]; ' +
+      'custom_fields_values.0.values.0.enum_id → NotSupportedChoice: The value you selected is not a valid choice.',
+  );
+  assert.doesNotMatch(result.content[0].text, /eyJ/);
+});
+
+test('400 errors without a readable body keep a generic message', async (context) => {
+  const baseUrl = await withServer(context, (_request, response) => {
+    response.writeHead(400).end('<html>bad</html>');
+  });
+  const api = new KommoAPI({ baseUrl, accessToken: 'test', maxRetries: 0 });
+
+  const error = await api.createLead({ name: 'Teste' }).catch((caught) => caught);
+
+  assert.equal(safeToolError(error).content[0].text, 'O Kommo recusou a requisição (400).');
 });

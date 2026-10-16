@@ -267,6 +267,58 @@ export interface KommoLossReason {
 
 export type KommoEntityType = 'leads' | 'contacts' | 'companies';
 
+export interface KommoCustomFieldEnum {
+  id: number;
+  value: string;
+  sort?: number;
+}
+
+export interface KommoCustomField {
+  id: number;
+  name: string;
+  type: string;
+  code?: string | null;
+  sort?: number;
+  group_id?: string | null;
+  is_api_only?: boolean;
+  required_statuses?: Array<{ pipeline_id: number; status_id: number }> | null;
+  enums?: KommoCustomFieldEnum[] | null;
+  [key: string]: unknown;
+}
+
+export interface KommoSource {
+  id: number;
+  name: string;
+  pipeline_id: number;
+  external_id?: string;
+  default?: boolean;
+  origin_code?: string | null;
+  [key: string]: unknown;
+}
+
+export interface KommoSalesbot {
+  id: number;
+  name: string;
+  type_functionality?: string;
+  can_interrupt?: boolean;
+  type?: number;
+  settings?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface KommoChatTemplate {
+  id: number;
+  name: string;
+  content?: string;
+  type?: string;
+  external_id?: string | null;
+  waba_category?: string | null;
+  waba_language?: string | null;
+  review_status?: string;
+  is_on_review?: boolean;
+  [key: string]: unknown;
+}
+
 export interface KommoNote {
   id?: number;
   entity_id?: number;
@@ -888,5 +940,57 @@ export class KommoAPI {
       entity_type: entityType,
     });
     return { accepted: response.status === 202 };
+  }
+
+  // ===== CATÁLOGOS DE IDS (campos, fontes, bots e modelos de chat) =====
+
+  // Percorre todas as páginas. O Kommo responde 204 sem corpo quando a lista está vazia.
+  private async collectPages<T>(
+    path: string,
+    embeddedKey: string,
+    limit: number,
+    params: KommoQueryParams = {},
+  ): Promise<T[]> {
+    const items: T[] = [];
+    for (let page = 1; ; page += 1) {
+      const response = await this.client.get(path, { params: { ...params, limit, page } });
+      const data = response.data && typeof response.data === 'object' ? response.data : {};
+      const pageItems: T[] = data._embedded?.[embeddedKey] ?? [];
+      items.push(...pageItems);
+      const hasNext =
+        Boolean(data._links?.next) ||
+        (typeof data._page_count === 'number' && page < data._page_count);
+      if (!hasNext || pageItems.length === 0) return items;
+    }
+  }
+
+  async getCustomFields(entityType: KommoEntityType): Promise<KommoCustomField[]> {
+    return this.collectPages<KommoCustomField>(
+      `/api/v4/${entityType}/custom_fields`,
+      'custom_fields',
+      50,
+    );
+  }
+
+  async getSources(): Promise<KommoSource[]> {
+    const response = await this.client.get('/api/v4/sources');
+    const data = response.data && typeof response.data === 'object' ? response.data : {};
+    return data._embedded?.sources ?? [];
+  }
+
+  async getSalesbots(typeFunctionality?: string): Promise<KommoSalesbot[]> {
+    return this.collectPages<KommoSalesbot>(
+      '/api/v4/bots',
+      'items',
+      250,
+      typeFunctionality ? { 'filter[type_functionality][]': typeFunctionality } : {},
+    );
+  }
+
+  // A API só devolve os modelos criados pela integração dona do token.
+  async getChatTemplates(): Promise<KommoChatTemplate[]> {
+    return this.collectPages<KommoChatTemplate>('/api/v4/chats/templates', 'chat_templates', 50, {
+      with: 'reviews',
+    });
   }
 }

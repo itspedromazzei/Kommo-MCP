@@ -1,8 +1,9 @@
 # Kommo MCP Server
 
-An open-source Model Context Protocol server for Kommo CRM. It exposes 23 tools,
+An open-source Model Context Protocol server for Kommo CRM. It exposes 27 tools,
 5 resources and 4 prompts for leads, contacts, companies, tasks, pipelines,
-reports, notes, Salesbot and loss reasons.
+reports, notes, Salesbot, loss reasons and ID catalogs (custom fields, sources,
+Salesbots and chat templates).
 
 The server supports MCP `2026-07-28`, stateless compatibility with the 2025
 protocol family, Streamable HTTP and local stdio.
